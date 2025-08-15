@@ -31,7 +31,7 @@ services:
       - huggingface_cache:/root/.cache/huggingface
       - nltk_data:/root/nltk_data
     ports:
-      - 8001:8000
+      - 8001:8002
     environment:
       - PYTHONPATH=/usr/src
       - PYTHONUNBUFFERED=TRUE
@@ -44,7 +44,7 @@ services:
     networks:
       - minima-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -58,7 +58,7 @@ services:
     ports:
       - 8003:8003
     environment:
-      - INDEXER_URL=http://indexer:8000
+      - INDEXER_URL=http://indexer:8002
       - PYTHONUNBUFFERED=TRUE
     depends_on:
       indexer:
