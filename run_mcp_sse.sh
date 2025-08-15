@@ -17,7 +17,7 @@ chmod 755 "$WORKDIR/cache/huggingface"
 chmod 755 "$WORKDIR/cache/nltk"
 
 echo "[run_mcp_sse] Starting Docker Compose services..."
-docker-compose -f "$WORKDIR/docker-compose-mcp-sse.yml" --env-file .env up -d
+docker compose -f "$WORKDIR/docker-compose-mcp-sse.yml" --env-file .env up -d
 
 echo "[run_mcp_sse] Starting MCP server..."
 uv --directory "$WORKDIR/mcp-server" run minima
