@@ -31,7 +31,7 @@ services:
       - huggingface_cache:/root/.cache/huggingface
       - nltk_data:/root/nltk_data
     ports:
-      - 8002:8000
+      - 8002:8002
     environment:
       - PYTHONPATH=/usr/src
       - PYTHONUNBUFFERED=TRUE
