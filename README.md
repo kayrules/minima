@@ -144,6 +144,19 @@ To install Minima for Claude Desktop automatically via [Smithery](https://smithe
 npx -y @smithery/cli install minima --client claude
 ```
 
+## installing MCP in claude code
+
+```bash
+claude mcp add minima -- /path/to/minima/run_mcp.sh
+```
+
+## Start docker for servicing mcp
+
+MCP with SSE
+```bash
+docker-compose -f docker-compose-mcp-sse.yml --env-file .env up -d --build
+```
+
 **For MCP usage, please be sure that your local machines python is >=3.10 and 'uv' installed.**
 
 Minima (https://github.com/dmayboroda/minima) is licensed under the Mozilla Public License v2.0 (MPLv2).

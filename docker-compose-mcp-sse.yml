@@ -1,23 +1,5 @@
 services:
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports:
-      - 11434:11434
-    expose:
-      - 11434
-    volumes:
-      - ./ollama:/root/.ollama
-    entrypoint: ["/bin/sh", "-c"]
-    environment:
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
-    command: >
-      "ollama serve &
-      sleep 10 &&
-      ollama pull ${OLLAMA_MODEL} &&
-      wait"
-
   qdrant:
     image: qdrant/qdrant:latest
     container_name: qdrant
@@ -32,6 +14,8 @@ services:
       - ./qdrant_data:/qdrant/storage
     environment:
       QDRANT__LOG_LEVEL: "INFO"
+    networks:
+      - minima-network
 
   indexer:
     build: 
@@ -44,6 +28,8 @@ services:
       - ${LOCAL_FILES_PATH}:/usr/src/app/local_files/
       - ./indexer:/usr/src/app
       - ./indexer_data:/indexer/storage
+      - huggingface_cache:/root/.cache/huggingface
+      - nltk_data:/root/nltk_data
     ports:
       - 8001:8000
     environment:
@@ -55,36 +41,44 @@ services:
       - CONTAINER_PATH=/usr/src/app/local_files/
     depends_on:
       - qdrant
+    networks:
+      - minima-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  llm:
+  sse-server:
     build: 
-      context: ././llm
+      context: ./sse
       dockerfile: Dockerfile
-      args:
-        RERANKER_MODEL: ${RERANKER_MODEL}
-    volumes:
-      - ./llm:/usr/src/app
+    container_name: minima-sse
     ports:
-      - 8003:8000
+      - 8003:8003
     environment:
-      - PYTHONPATH=/usr/src
+      - INDEXER_URL=http://indexer:8000
       - PYTHONUNBUFFERED=TRUE
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
-      - RERANKER_MODEL=${RERANKER_MODEL}
-      - LOCAL_FILES_PATH=${LOCAL_FILES_PATH}
-      - CONTAINER_PATH=/usr/src/app/local_files/
     depends_on:
-      - ollama
-      - qdrant
-      - indexer
+      indexer:
+        condition: service_healthy
+    networks:
+      - minima-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
 
-  chat:
-    build: ./chat
-    volumes:
-      - ./chat:/usr/src/app
-    ports:
-      - 3000:3000
-    depends_on:
-      - ollama
-      - qdrant
-      - llm
+networks:
+  minima-network:
+    driver: bridge
+
+volumes:
+  huggingface_cache:
+    driver: local
+  nltk_data:
+    driver: local

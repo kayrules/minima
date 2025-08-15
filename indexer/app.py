@@ -1,6 +1,7 @@
 import nltk
 import logging
 import asyncio
+import time
 from indexer import Indexer
 from pydantic import BaseModel
 from storage import MinimaStore
@@ -60,7 +61,34 @@ async def embedding(request: Query):
         return {"result": result}
     except Exception as e:
         logger.error(f"Error in processing embedding: {e}")
-        return {"error": str(e)}    
+        return {"error": str(e)}
+
+
+@router.get(
+    "/health",
+    response_description='Health check endpoint',
+)
+async def health_check():
+    """Health check endpoint for container orchestration"""
+    try:
+        # Lightweight check - just verify server is responding
+        # Full embedding test is too heavy for frequent health checks
+        return {
+            "status": "healthy",
+            "service": "minima-indexer",
+            "timestamp": time.time(),
+            "server": "running",
+            "version": "1.0.0"
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "service": "minima-indexer", 
+            "timestamp": time.time(),
+            "error": str(e),
+            "version": "1.0.0"
+        }    
 
 
 @asynccontextmanager
