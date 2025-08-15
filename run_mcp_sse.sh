@@ -15,7 +15,7 @@ chmod 755 "$WORKDIR/indexer_data"
 echo "[run_mcp_sse] Starting Docker Compose services..."
 docker compose -f "$WORKDIR/docker-compose-mcp-sse.yml" --env-file .env up -d
 
-echo "[run_mcp_sse] Starting MCP server in background..."
-nohup uv --directory "$WORKDIR/mcp-server" run minima > mcp.log 2>&1 &
-echo "[run_mcp_sse] MCP server started in background (PID: $!)"
-echo "[run_mcp_sse] Check logs with: tail -f mcp.log"
+echo "[run_mcp_sse] Services started successfully!"
+echo "[run_mcp_sse] - Indexer: http://localhost:8002"
+echo "[run_mcp_sse] - SSE Server: http://localhost:8003"
+echo "[run_mcp_sse] Check status: docker compose -f docker-compose-mcp-sse.yml ps"
