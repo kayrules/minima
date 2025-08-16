@@ -18,6 +18,9 @@ router = APIRouter()
 async_queue = AsyncQueue()
 MinimaStore.create_db_and_tables()
 
+# Run startup integrity check
+indexer.startup_integrity_check()
+
 def init_loader_dependencies():
     nltk.download('punkt')
     nltk.download('punkt_tab')

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minima MCP SSE Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .query-form {
+            margin-bottom: 30px;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .status.processing {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        .status.completed {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 20px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Minima MCP Server with SSE</h1>
+        <p>Search through local documents using Server-Sent Events for real-time results.</p>
+        
+        <div class="query-form">
+            <input type="text" id="queryInput" placeholder="Enter your search query (e.g., 'term deposit')" value="term deposit">
+            <button id="queryBtn" onclick="startSSEQuery()">Search with SSE</button>
+            <button id="directBtn" onclick="directQuery()">Direct Query</button>
+        </div>
+        
+        <div id="status" class="status hidden"></div>
+        <div id="result" class="result hidden"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+
+        function showStatus(message, type = 'processing') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.classList.remove('hidden');
+        }
+
+        function showResult(text) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = text;
+            resultDiv.classList.remove('hidden');
+        }
+
+        function hideResult() {
+            document.getElementById('result').classList.add('hidden');
+        }
+
+        function setButtonsEnabled(enabled) {
+            document.getElementById('queryBtn').disabled = !enabled;
+            document.getElementById('directBtn').disabled = !enabled;
+        }
+
+        function startSSEQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            // Close any existing connection
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            hideResult();
+            setButtonsEnabled(false);
+            showStatus('Connecting to SSE stream...', 'processing');
+
+            // Encode the query for URL
+            const encodedQuery = encodeURIComponent(query);
+            
+            // Start SSE connection
+            eventSource = new EventSource(`http://localhost:8002/query/sse/${encodedQuery}`);
+
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.status === 'processing') {
+                        showStatus(`Processing query: "${data.query}"`, 'processing');
+                    } else if (data.status === 'completed') {
+                        showStatus('Query completed successfully!', 'completed');
+                        showResult(data.result);
+                        setButtonsEnabled(true);
+                        eventSource.close();
+                    } else if (data.error) {
+                        showStatus(`Error: ${data.error}`, 'error');
+                        setButtonsEnabled(true);
+                        eventSource.close();
+                    }
+                } catch (e) {
+                    console.error('Error parsing SSE data:', e);
+                }
+            };
+
+            eventSource.onerror = function(event) {
+                showStatus('Connection error occurred', 'error');
+                setButtonsEnabled(true);
+                eventSource.close();
+            };
+        }
+
+        async function directQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            hideResult();
+            setButtonsEnabled(false);
+            showStatus('Processing direct query...', 'processing');
+
+            try {
+                const response = await fetch('http://localhost:8002/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: query })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    showStatus(`Error: ${data.error}`, 'error');
+                } else {
+                    showStatus('Direct query completed!', 'completed');
+                    showResult(data.result);
+                }
+            } catch (error) {
+                showStatus(`Network error: ${error.message}`, 'error');
+            } finally {
+                setButtonsEnabled(true);
+            }
+        }
+
+        // Allow Enter key to trigger search
+        document.getElementById('queryInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                startSSEQuery();
+            }
+        });
+    </script>
+</body>
+</html>

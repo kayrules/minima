@@ -214,3 +214,89 @@ class Indexer:
 
     def embed(self, query: str):
         return self.embed_model.embed_query(query)
+    
+    def get_qdrant_document_count(self) -> tuple[int, int]:
+        """Get the number of documents in Qdrant collection"""
+        try:
+            collection_info = self.qdrant.get_collection(self.config.QDRANT_COLLECTION)
+            return collection_info.points_count, collection_info.indexed_vectors_count
+        except Exception as e:
+            logger.warning(f"Could not get Qdrant document count: {e}")
+            return 0, 0
+    
+    def get_sqlite_file_count(self) -> int:
+        """Get the number of files tracked in SQLite"""
+        try:
+            from storage import MinimaStore, engine
+            from sqlmodel import text
+            with engine.connect() as connection:
+                result = connection.execute(text("SELECT COUNT(*) FROM minimadoc"))
+                return result.scalar()
+        except Exception as e:
+            logger.warning(f"Could not get SQLite file count: {e}")
+            return 0
+    
+    def validate_data_consistency(self) -> bool:
+        """Check if SQLite and Qdrant data are consistent"""
+        qdrant_count, indexed_count = self.get_qdrant_document_count()
+        sqlite_count = self.get_sqlite_file_count()
+        
+        logger.info(f"Data consistency check - Qdrant: {qdrant_count} docs ({indexed_count} indexed), SQLite: {sqlite_count} files")
+        
+        # If SQLite has files but Qdrant is empty, we have a consistency issue
+        if sqlite_count > 0 and qdrant_count == 0:
+            logger.warning("Data inconsistency detected: SQLite has file records but Qdrant is empty")
+            return False
+        
+        # If vectors exist but aren't indexed, check if it's due to indexing threshold
+        # Qdrant only builds HNSW index when document count exceeds indexing_threshold (default: 10000)
+        if qdrant_count > 0 and indexed_count == 0 and qdrant_count >= 10000:
+            logger.warning("Data inconsistency detected: Large dataset but vectors are not indexed")
+            return False
+        
+        # Test if vector search actually works by doing a simple search
+        if qdrant_count > 0:
+            try:
+                # Try a simple vector search to detect corrupted data
+                test_result = self.document_store.similarity_search("test query", k=1)
+                logger.info(f"Vector search test successful: {len(test_result)} results")
+            except Exception as e:
+                error_str = str(e)
+                if "OutputTooSmall" in error_str or "Service internal error" in error_str:
+                    logger.warning(f"Data inconsistency detected: Vector search fails with corruption error: {error_str}")
+                    return False
+                else:
+                    logger.warning(f"Vector search test failed with unknown error: {error_str}")
+                    # Don't fail for unknown errors, might be temporary
+        
+        # If there's a large discrepancy (more than 50% difference), something's wrong
+        if sqlite_count > 0:
+            ratio = qdrant_count / (sqlite_count * 3)  # Rough estimate: ~3 chunks per file
+            if ratio < 0.5:
+                logger.warning(f"Data inconsistency detected: Too few documents in Qdrant (ratio: {ratio:.2f})")
+                return False
+        
+        logger.info("Data consistency check passed")
+        return True
+    
+    def force_reindex_all(self):
+        """Force reindexing of all files by clearing SQLite records"""
+        try:
+            from storage import engine
+            from sqlmodel import text
+            with engine.connect() as connection:
+                connection.execute(text("DELETE FROM minimadoc"))
+                connection.commit()
+            logger.info("Cleared SQLite records to force reindexing")
+        except Exception as e:
+            logger.error(f"Failed to clear SQLite records: {e}")
+    
+    def startup_integrity_check(self):
+        """Perform startup integrity check and fix inconsistencies"""
+        logger.info("Running startup integrity check...")
+        
+        if not self.validate_data_consistency():
+            logger.warning("Data inconsistency detected. Forcing reindexing...")
+            self.force_reindex_all()
+        else:
+            logger.info("Data integrity check passed")

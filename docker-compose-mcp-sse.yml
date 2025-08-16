@@ -1,0 +1,77 @@
+services:
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - 6333:6333
+      - 6334:6334
+    expose:
+      - 6333
+      - 6334
+      - 6335
+    volumes:
+      - ./qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__LOG_LEVEL: "INFO"
+      # Increase WAL retention and flush frequency to prevent data loss
+      QDRANT__STORAGE__WAL__WAL_CAPACITY_MB: 128
+      QDRANT__STORAGE__WAL__WAL_SEGMENTS_AHEAD: 2
+      QDRANT__STORAGE__WAL__WAL_RETAIN_CLOSED: 3
+      # Increase flush frequency to disk
+      QDRANT__STORAGE__OPTIMIZER__FLUSH_INTERVAL_SEC: 5
+      # Force more aggressive disk persistence
+      QDRANT__STORAGE__OPTIMIZER__MEMMAP_THRESHOLD: 50000
+      # Disable on-disk payload temporarily to avoid gridstore corruption
+      QDRANT__STORAGE__ON_DISK_PAYLOAD: "false"
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:6333/collections || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  indexer:
+    build: 
+      context: ./indexer
+      dockerfile: Dockerfile
+      args:
+        EMBEDDING_MODEL_ID: sentence-transformers/all-mpnet-base-v2
+        EMBEDDING_SIZE: 768
+    volumes:
+      - ${LOCAL_FILES_PATH}:/usr/src/app/local_files/
+      - ./indexer:/usr/src/app
+      - ./indexer_data:/indexer/storage
+    ports:
+      - 8002:8002
+    environment:
+      - PYTHONPATH=/usr/src
+      - PYTHONUNBUFFERED=TRUE
+      - LOCAL_FILES_PATH=/Users/kayrules/Projects/AI/minima/resources
+      - EMBEDDING_MODEL_ID=sentence-transformers/all-mpnet-base-v2
+      - EMBEDDING_SIZE=768
+      - CONTAINER_PATH=/usr/src/app/local_files/
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+    stop_grace_period: 10s
+
+  # mcp-server-sse:
+  #   build:
+  #     context: ./mcp-server-sse
+  #     dockerfile: Dockerfile
+  #   container_name: mcp-server-sse
+  #   ports:
+  #     - 8003:8003
+  #   environment:
+  #     - PYTHONPATH=/usr/src/app
+  #     - PYTHONUNBUFFERED=TRUE
+  #     - INDEXER_URL=http://indexer:8002
+  #   volumes:
+  #     - ./mcp-server-sse/src:/usr/src/app/src
+  #     - ./mcp-server-sse/app.log:/usr/src/app/app.log
+  #   depends_on:
+  #     - indexer
+  #   restart: unless-stopped

@@ -1,11 +1,14 @@
 import httpx
 import logging
+import os
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-REQUEST_DATA_URL = "http://localhost:8002/query"
+# Use environment variable for Docker networking, fallback to localhost
+INDEXER_URL = os.getenv("INDEXER_URL", "http://localhost:8001")
+REQUEST_DATA_URL = f"{INDEXER_URL}/query"
 REQUEST_HEADERS = {
     'Accept': 'application/json',
     'Content-Type': 'application/json'
